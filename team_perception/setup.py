@@ -24,7 +24,9 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'yolo_node = team_perception.yolo_node:main'
+            'yolo_node = team_perception.yolo_node:main',
+            'qr_scanner = team_perception.qr_scanner_node:main',
+            'webcam_bridge = team_perception.webcam_bridge_node:main',
         ],
     },
 )

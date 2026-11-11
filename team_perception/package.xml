@@ -11,11 +11,18 @@
   <depend>sensor_msgs</depend>
   <depend>cv_bridge</depend>
   <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <!-- Humble's OpenCV is built without QUIRC and cannot decode QR codes -->
+  <exec_depend>python3-pyzbar</exec_depend>
+  <!-- Also needs zxing-cpp from pip (no rosdep key): see requirements.txt -->
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-qrcode</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

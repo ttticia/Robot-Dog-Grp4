@@ -1,0 +1,6 @@
+# pip-only dependencies (not available through apt / rosdep). Install on every machine
+# that runs the scanner, including the robot:
+#     pip3 install --user -r src/team_perception/requirements.txt
+# The scanner still works without it (falls back to pyzbar), but is slower and misses
+# tilted codes.
+zxing-cpp==2.3.0
