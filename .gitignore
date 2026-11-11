@@ -1,6 +1,24 @@
+# Python caches
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# colcon output (only appears here if colcon was run from src/ by mistake)
 build/
 install/
 log/
+
+# Local results from `ros2 run team_perception annotate` (large annotated videos)
+**/test_runs/
+
+# Model weights: downloaded automatically to ~/.cache/team_perception on first use
+*.pt
+*.onnx
+*.engine
+
+# Editor / OS clutter
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

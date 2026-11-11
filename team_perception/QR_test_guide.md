@@ -34,8 +34,8 @@ git clone git@github.com:ttticia/Robot-Dog-Grp4.git src
 ```bash
 # Decoders: Humble's OpenCV 4.5.4 is built WITHOUT QR decoding support (no QUIRC)
 sudo apt install python3-pyzbar python3-qrcode ros-humble-image-transport-plugins ros-humble-rqt-image-view
-pip3 install --user -r ~/robot_challenge_workspace/src/team_perception/requirements.txt   # zxing-cpp==2.3.0
 ```
+Then do the pip installs in the [README, section 2](README.md#2-what-you-need-to-install-first). `requirements.txt` also holds the person detector's packages (ultralytics). Install CPU torch **first**, and remove pip's setuptools afterwards, as described there. Otherwise pip pulls the multi-GB CUDA torch and a setuptools that breaks colcon.
 
 | Package | Why |
 |---|---|
@@ -58,10 +58,11 @@ colcon build --packages-select team_perception --symlink-install
 source install/setup.bash        # already in ~/.bashrc on the dev laptop
 ```
 
-The package has three executables:
+The package has four executables. This guide covers the QR side:
 - `qr_scanner` is the scanner node.
 - `webcam_bridge` receives the Windows webcam stream (see section 4).
-- `yolo_node` is an empty placeholder for now.
+- `human_detector` is the YOLO person node (see the [README](README.md), section 6).
+- `annotate` is the offline photo and video annotation tool (see the end of section 9).
 
 ## 3. Run the unit tests
 
@@ -72,9 +73,7 @@ python3 -m pytest test/ -v
 cd ~/robot_challenge_workspace && colcon test --packages-select team_perception && colcon test-result --verbose
 ```
 
-Expected result: no failures. Two results don't count as passes:
-- `test_real_photo_curved_paper` is **xfail** (an expected failure): no decoder can read `test_D.jpg` because the paper is curved (see section 10).
-- Under colcon, the auto-generated copyright check is **skipped**.
+Expected result: no failures. One result doesn't count as a pass: `test_real_photo_curved_paper` is **xfail** (an expected failure). No decoder can read `test_D.jpg` because the paper is curved (see section 10).
 
 Run `colcon` from the workspace root (`~/robot_challenge_workspace`), never from `src/`. Run from `src/`, it creates `build/`, `install/` and `log/` folders inside the git repo.
 
@@ -315,6 +314,26 @@ Benchmarks from development:
 - **Small codes:** 69 vs 63 in the same comparison.
 - **Speed:** about 4 ms per frame with a code in view, vs about 50 ms for pyzbar alone.
 
+### Annotate photos and videos into `test_runs/` (no ROS graph)
+
+The `annotate` tool runs the scanner's own decoder and overlay (`qr_utils.decode_qr` and `draw_detections`) on files. It saves the results so you can review or compare them later. For QR-only tests, use `--type qr`. To also draw YOLO person boxes, use `--type both`.
+```bash
+ros2 run team_perception annotate --type qr team_perception/test/QR.mp4               # a video
+ros2 run team_perception annotate --type qr photo1.jpg photos_folder/ --name hallway   # photos
+ros2 run team_perception annotate --type qr /mnt/c/qr_clip --frames-as-video --fps 30  # recorded frame folder
+```
+Each call creates `team_perception/test_runs/qr/<date>_<time>_<name>/` (or `both/`) containing:
+- `input/`: a copy of the input media (`--no-copy` skips this).
+- `annotated_<video>.mp4`: the video with boxes, decoded text and a status bar (time, decode ms, codes found).
+- `photos/*.jpg`: annotated photos. Photos where nothing was found are marked `NOTHING FOUND`.
+- `first_seen/*.jpg`: the frame where each code was first read.
+- `detections.csv`: one row per code per frame (time, fast/full scan, decode ms, corner points).
+- `summary.txt` / `summary.json`: hit rate, decode times, when each code was seen, and the exact command and settings used.
+
+Videos follow the node's schedule: every frame gets a fast pass, and every 5th frame gets a full scan (`--full-scan-every`). Boxes stay on screen for `--hold-s` 0.5. Photos always get the full scan. Inputs larger than 1280×720 are scaled down, as the webcam sender does (`--max-width 0` turns this off). Unlike the live node, every frame is decoded and none are dropped.
+
+Other options: `--max-frames N`, `--no-video` and `--out-root DIR` (or the `TEAM_PERCEPTION_TEST_RUNS` environment variable). With `--type qr`, the tool takes about 4 minutes for a 2-minute 640×480 clip. See the README, section 7, for the full folder layout.
+
 ## 10. Tips and known limits
 
 - **Keep codes flat.** Mount them on card or a rigid surface. A curved printout (`test_D.jpg`) defeats every decoder we tried: zxing, pyzbar, OpenCV, WeChat CNN and QReader. YOLO detectors (qrdet) still *find* it, though, with 0.91 to 0.93 confidence.
@@ -322,7 +341,7 @@ Benchmarks from development:
 - **Size and distance:** a code needs about 3 or more pixels per module. A 21×21 code therefore needs at least about 80 px across in the image. The full scan (2× upscale) helps a little at longer range.
 - **Lighting:** glare on glossy paper is worse than dim light. Use matte prints.
 - **CPU:** if the robot computer is busy, set `rate_hz:=10` and `full_scan_every:=0`, or lower the camera resolution.
-- **Planned:** a YOLO-based `qr_detector` (qrdet, exported to ONNX), to spot codes the decoders can't read yet and steer the robot towards a better view. This is not built yet. `yolo_node.py` is a placeholder.
+- **Planned:** a YOLO-based `qr_detector` (qrdet, exported to ONNX), to spot codes the decoders can't read yet and steer the robot towards a better view. This is not built yet.
 
 ## 11. Troubleshooting
 
@@ -353,4 +372,4 @@ git push origin main
 ```
 `.gitignore` keeps Python caches and colcon output out of the repo.
 
-Anyone pulling new code must rebuild (section 2). If `requirements.txt` changed, they must also re-run `pip3 install --user -r team_perception/requirements.txt`.
+Anyone pulling new code must rebuild (section 2). If `requirements.txt` changed, they must also redo the pip installs in the [README, section 2](README.md#2-what-you-need-to-install-first): CPU torch first, then `requirements.txt`, then `pip3 uninstall -y setuptools`.
