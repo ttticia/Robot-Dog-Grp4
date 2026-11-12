@@ -79,7 +79,7 @@ Run `colcon` from the workspace root (`~/robot_challenge_workspace`), never from
 
 What the tests cover:
 - Codes that the tests generate: plain, small inside a large scene, perspective-tilted, and no code at all.
-- The real photo `test/test_images/test_c.jpg`: a hand-held printout seen at an angle, which must decode as `C`.
+- The real photo `test/testing_data/test_images/test_c.jpg`: a hand-held printout seen at an angle, which must decode as `C`.
 - The scanner still working without zxing (pyzbar only).
 - The "flatten a located but unreadable code" fallback.
 - Depth lookup, 3-D deprojection, and the overlay drawing.
@@ -318,7 +318,7 @@ Benchmarks from development:
 
 The `annotate` tool runs the scanner's own decoder and overlay (`qr_utils.decode_qr` and `draw_detections`) on files. It saves the results so you can review or compare them later. For QR-only tests, use `--type qr`. To also draw YOLO person boxes, use `--type both`.
 ```bash
-ros2 run team_perception annotate --type qr team_perception/test/QR.mp4               # a video
+ros2 run team_perception annotate --type qr team_perception/test/testing_data/QR.mp4               # a video
 ros2 run team_perception annotate --type qr photo1.jpg photos_folder/ --name hallway   # photos
 ros2 run team_perception annotate --type qr /mnt/c/qr_clip --frames-as-video --fps 30  # recorded frame folder
 ```

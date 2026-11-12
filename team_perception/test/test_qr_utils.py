@@ -8,7 +8,7 @@ import pytest
 from team_perception import qr_utils
 from team_perception.qr_utils import decode_qr, depth_at, deproject, draw_detections
 
-IMAGES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_images')
+IMAGES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'testing_data', 'test_images')
 
 
 def _qr_modules(text):

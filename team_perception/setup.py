@@ -27,6 +27,7 @@ setup(
         'console_scripts': [
             'qr_scanner = team_perception.qr_scanner_node:main',
             'human_detector = team_perception.human_detector_node:main',
+            'poster_detector = team_perception.poster_detector_node:main',
             'webcam_bridge = team_perception.webcam_bridge_node:main',
             'annotate = team_perception.annotate:main',
         ],

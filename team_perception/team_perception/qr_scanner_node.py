@@ -105,6 +105,7 @@ class QrScanner(Node):
                                      qos_profile_sensor_data)
 
         self.pub = self.create_publisher(String, '/qr/detections', 10)
+        self.found_pub = self.create_publisher(String, '/found', 10)   # "QR found", once per code
         self.debug_pub = self.create_publisher(Image, '/qr/debug_image', 1)
         # JPEG version: ~30x smaller, so much less lag in rqt. rqt shows it as transport
         # "compressed" once ros-humble-image-transport-plugins is installed.
@@ -115,10 +116,9 @@ class QrScanner(Node):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.log_dir = g('log_dir')
-        os.makedirs(self.log_dir, exist_ok=True)
+        # Record of found codes (snapshot + CSV row per new code); the folder and file are
+        # only created when the first code is found, so startup touches no files.
         self.csv_path = os.path.join(self.log_dir, time.strftime('qr_%Y%m%d_%H%M%S.csv'))
-        with open(self.csv_path, 'w', newline='') as f:
-            csv.writer(f).writerow(['wall_time', 'text', 'frame', 'x', 'y', 'z', 'snapshot'])
 
         self.running = True
         self.worker = threading.Thread(target=self.decode_loop, daemon=True)
@@ -229,6 +229,9 @@ class QrScanner(Node):
         i['last'] = now
         if now - self.seen.get(text, -1e9) < self.repeat_after:
             return
+        if text not in self.seen:      # first time this code is seen: announce it once
+            self.get_logger().info('QR found')
+            self.found_pub.publish(String(data='QR found'))
         self.seen[text] = now
         i['count'] += 1
         try:
@@ -246,6 +249,7 @@ class QrScanner(Node):
         where = f'{frame} ({xyz[0]:.2f}, {xyz[1]:.2f}, {xyz[2]:.2f})' if xyz else 'no position'
         self.info[text]['where'] = where
 
+        os.makedirs(self.log_dir, exist_ok=True)
         snap = os.path.join(self.log_dir, f'qr_{int(time.time() * 1000)}.jpg')
         dbg = draw_detections(img.copy(), [(text, corners)], {text: [where]})
         cv2.imwrite(snap, dbg)
@@ -254,7 +258,10 @@ class QrScanner(Node):
                   'position': list(xyz) if xyz else None, 'snapshot': snap,
                   'stamp': Time.from_msg(header.stamp).nanoseconds * 1e-9}
         self.pub.publish(String(data=json.dumps(result)))
+        new_file = not os.path.exists(self.csv_path)
         with open(self.csv_path, 'a', newline='') as f:
+            if new_file:
+                csv.writer(f).writerow(['wall_time', 'text', 'frame', 'x', 'y', 'z', 'snapshot'])
             csv.writer(f).writerow([time.time(), text, frame, *(xyz or ('', '', '')), snap])
         self.get_logger().info(f'QR "{text}" at {where}')
 

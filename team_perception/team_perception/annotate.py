@@ -4,7 +4,7 @@ Annotate photos and videos with QR and/or person detections, offline (no ROS gra
 Uses the same code as the nodes (qr_utils.decode_qr, human_utils.HumanDetector), so
 what you see here is what the robot would detect.
 
-    ros2 run team_perception annotate --type qr     team_perception/test/QR.mp4
+    ros2 run team_perception annotate --type qr     team_perception/test/testing_data/QR.mp4
     ros2 run team_perception annotate --type human  photo.jpg photos_folder/
     ros2 run team_perception annotate --type both   clip.mp4 --name hallway
     ros2 run team_perception annotate --type qr     /mnt/c/qr_clip --frames-as-video --fps 30

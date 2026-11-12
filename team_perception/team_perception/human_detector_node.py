@@ -57,7 +57,8 @@ class HumanDetectorNode(Node):
         p('hold_s', 0.5)               # keep drawing boxes this long after last inference
         p('publish_debug', True)
         p('log_dir', os.path.expanduser('~/human_logs'))
-        p('log_every_s', 5.0)          # save an annotated snapshot at most this often
+        p('log_every_s', 0.0)          # debugging: save an annotated snapshot + CSV row at
+        #                                most this often while people are seen (0 = off)
 
         def g(name):
             return self.get_parameter(name).value
@@ -109,17 +110,15 @@ class HumanDetectorNode(Node):
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
-        self.log_dir = g('log_dir')
-        os.makedirs(self.log_dir, exist_ok=True)
+        self.log_dir = g('log_dir')   # used only when log_every_s > 0
         self.csv_path = os.path.join(self.log_dir, time.strftime('humans_%Y%m%d_%H%M%S.csv'))
-        with open(self.csv_path, 'w', newline='') as f:
-            csv.writer(f).writerow(['wall_time', 'count', 'confidences', 'positions',
-                                    'snapshot'])
 
         self.running = True
         self.worker = threading.Thread(target=self.infer_loop, daemon=True)
         self.worker.start()
-        self.get_logger().info(f'Human detector on {image_topic}, logging to {self.csv_path}')
+        self.get_logger().info(f'Human detector on {image_topic}'
+                               + (f', snapshots every {self.log_every:g}s to {self.log_dir}'
+                                  if self.log_every > 0 else ''))
 
     # --- callbacks ---------------------------------------------------------------
     def on_image(self, msg):
@@ -214,11 +213,16 @@ class HumanDetectorNode(Node):
 
     def report(self, people, dets, img, header, now):
         snap = ''
-        if now - self._last_log >= self.log_every:
+        if self.log_every > 0 and now - self._last_log >= self.log_every:
             self._last_log = now
+            os.makedirs(self.log_dir, exist_ok=True)
             snap = os.path.join(self.log_dir, f'humans_{int(now * 1000)}.jpg')
             cv2.imwrite(snap, draw_humans(img.copy(), dets, [[p['where']] for p in people]))
+            new_file = not os.path.exists(self.csv_path)
             with open(self.csv_path, 'a', newline='') as f:
+                if new_file:
+                    csv.writer(f).writerow(['wall_time', 'count', 'confidences', 'positions',
+                                            'snapshot'])
                 csv.writer(f).writerow([now, len(people),
                                         ' '.join(f'{p["conf"]:.2f}' for p in people),
                                         ' | '.join(p['where'] for p in people), snap])
@@ -226,6 +230,8 @@ class HumanDetectorNode(Node):
                                    + '; '.join(f'{p["conf"]:.2f} at {p["where"]}'
                                                for p in people))
         msg = {'stamp': Time.from_msg(header.stamp).nanoseconds * 1e-9,
+               'frame_id': header.frame_id,
+               'image_size': [int(img.shape[1]), int(img.shape[0])],   # boxes are in these px
                'count': len(people), 'snapshot': snap or None,
                'people': [{k: v for k, v in p.items() if k != 'where'} for p in people]}
         self.pub.publish(String(data=json.dumps(msg)))

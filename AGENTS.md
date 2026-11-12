@@ -15,10 +15,12 @@ There is **one package**, `team_perception/`. The older `human_detection` and `q
 | `human_utils.py` | ROS-free person logic: `HumanDetector` (Ultralytics YOLO, class 0), `draw_humans`, `resolve_model`, `box_depth_pixel`. Reuses the drawing and depth helpers from `qr_utils`. |
 | `qr_scanner_node.py` | Node `qr_scanner`: publishes `/qr/detections` and `/qr/debug_image[/compressed]`, logs to `~/qr_logs`. |
 | `human_detector_node.py` | Node `human_detector`: publishes `/humans/detections` and `/humans/debug_image[/compressed]`, logs to `~/human_logs`. |
+| `poster_utils.py` | ROS-free poster-vs-real logic: `edge_ring_test` (inverse-depth plane fit on the torso, extrapolated to a ring outside the box), `StaticMap` + `static_map_test`, `combine` (`map_mode` require/veto/off), `PosterTracker` (voting by position). |
+| `poster_detector_node.py` | Node `poster_detector`: consumes `/humans/detections` (needs its `stamp` + `image_size`), the aligned depth, `camera_info`, `/map` (transient local) and TF. Publishes `/posters/detections` (confirmed only), `/posters/classifications` and `/posters/debug_image[/compressed]`. Logs to `~/poster_logs`. |
 | `webcam_bridge_node.py` | Node `webcam_bridge`: TCP JPEG stream to `/camera/color/image_raw[/compressed]`. |
 | `annotate.py` | Executable `annotate --type {qr,human,both} <inputs>`: the offline test tool. |
 
-Also in the package: `scripts/` (`webcam_sender_windows.py`, `eval_qr_video.py`) and `test/` (unit tests, the clip `QR.mp4`, and `test_images/`).
+Also in the package: `scripts/` (`perception.sh`, the all-in-one command wrapper; `webcam_sender_windows.py`; `eval_qr_video.py`) and `test/` (unit tests; sample media in `test/testing_data/`: the clip `QR.mp4` and `test_images/`).
 
 Pure logic lives in the ROS-free `*_utils.py` modules, so it can be unit-tested without a ROS graph. Keep it that way: nodes and `annotate` are thin wrappers, and `annotate` must call the same functions as the nodes so that offline results match the robot.
 
@@ -47,14 +49,18 @@ cd src/team_perception && python3 -m pytest test/ -q   # includes flake8 + pep25
 - **rqt compressed images** need `ros-humble-image-transport-plugins`. If they're missing, view the raw topics (`/qr/debug_image`, `/humans/debug_image`).
 - **`ros2 topic echo` failing with `!rclpy.ok()`** means the ROS daemon is stale: run `ros2 daemon stop; ros2 daemon start`.
 - **Killing processes:** `pkill -f <pattern>` also matches your own shell when the pattern appears in the command line. Kill by PID from `pgrep -f` instead.
+- **`ros2 run` is only a wrapper.** Killing its PID leaves the real node, a child under `install/.../lib/team_perception/`, running. Either start it with `setsid` and kill the whole group (`kill -INT -- -PGID`), as `perception.sh` does, or kill the child PIDs too. After any live test, check with `pgrep -fa "team_perception/lib|webcam_sender|topic echo|static_transform"` that nothing is left. A leftover `webcam_bridge` holds port 5005 and hijacks the next test.
 - `sudo` needs a password, so you can't apt install. Ask the user to run the command.
 
 ## Running things for verification
 
+- **Debugging tools are opt-in.** Don't make anything debug-only run at startup. Debug images are drawn only while subscribed; `human_detector log_every_s` defaults to 0; `poster_detector publish_debug` defaults to false; `/posters/classifications` is only published while subscribed; log files are created on the first find. `perception.sh demo/robot` open rqt and the `/found` listener only with `--view`/`--echo`.
+- **Prefer `team_perception/scripts/perception.sh`** (`help` lists the commands). It sources ROS and the workspace itself; `demo <video> qr|human|both` runs the full live pipeline and cleans up on Ctrl+C or exit. Keep it updated when nodes, topics or setup steps change.
+
 - **Live pipeline from a video, without a camera:** start these four, each in the background:
   1. `ros2 run team_perception webcam_bridge`
   2. the node, with `--ros-args -p image_transport:=compressed -p use_depth:=false`
-  3. `python3 team_perception/scripts/webcam_sender_windows.py --video team_perception/test/QR.mp4 --loop`
+  3. `python3 team_perception/scripts/webcam_sender_windows.py --video team_perception/test/testing_data/QR.mp4 --loop`
   4. `rqt_image_view <debug topic>`
 
   Stop them all when you're done.
@@ -62,7 +68,9 @@ cd src/team_perception && python3 -m pytest test/ -q   # includes flake8 + pep25
   - A full run on `QR.mp4` (4,112 frames, 640×480) takes about 4 minutes with `--type qr` and about 10 minutes with `human` or `both`, so run it in the background. Use `--max-frames N` for quick checks.
 - **Known human results on QR.mp4:** a poster of a person next to the QR code at about 70–72 s (confidence about 0.85), and real people in the lab background at 4–14 s and 55–100 s. No false positives were seen on the toys or boards.
 - **Known QR.mp4 results:** codes `J` (about 32 s), `I` (35–73 s) and the "rescue team needs medical supplies…" message (about 70 s). A regression in the QR decoder shows up as one of these going missing.
-- **Runtime logs:** `~/qr_logs/` and `~/human_logs/`, outside the repo.
+- **poster_detector:** `QR.mp4` has no depth, so it can't be tested on that clip. `test_poster_utils.py` covers the logic on synthetic depth and maps. For a ROS smoke test, publish fake depth, `camera_info`, `/map`, a static TF `map`→camera and `/humans/detections` with matching stamps. The thresholds are still untuned on real robot data.
+- **`/found` (std_msgs/String):** `qr_scanner` publishes `QR found` once per new code text, and `poster_detector` publishes `Human found` once per new poster position. Both are also logged. Keep these exact strings, because other tools may match on them.
+- **Runtime logs:** `~/qr_logs/`, `~/human_logs/` and `~/poster_logs/`, outside the repo.
 
 ## Repo rules
 
