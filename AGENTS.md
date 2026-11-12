@@ -5,6 +5,8 @@ This repo is the `src/` folder of a ROS 2 Humble colcon workspace at `~/robot_ch
 ## Chat instructions
 At the end of each prompt response, create summary in bullet points. Update this file when changes to the project are made.
 
+If a process will run for more than 1 minute (a build, a full `annotate` run, a bag evaluation and so on), give the user a progress update at least every 2 minutes until it finishes: what is running, how far it has got (e.g. from `STATUS.txt` or the frame counter) and the expected time left.
+
 ## Layout
 
 There is **one package**, `team_perception/`. The older `human_detection` and `qr_test_tools` packages were merged into it; don't recreate them.
@@ -21,6 +23,10 @@ There is **one package**, `team_perception/`. The older `human_detection` and `q
 | `annotate.py` | Executable `annotate --type {qr,human,both} <inputs>`: the offline test tool. |
 
 Also in the package: `scripts/` (`perception.sh`, the all-in-one command wrapper; `webcam_sender_windows.py`; `eval_qr_video.py`) and `test/` (unit tests; sample media in `test/testing_data/`: the clip `QR.mp4` and `test_images/`).
+
+**Robot build: `challenge_files/`.** This is a slimmed copy of `team_perception` that runs aboard the dog: the three detector nodes, `qr_utils.py`, `human_utils.py` (without `draw_humans`), `poster_utils.py`, and `launch/robot.launch.py` (`ros2 launch team_perception robot.launch.py`). It has no debug topics, no `/posters/classifications`, no `log_every_s`, no `annotate`, no `webcam_bridge`, no scripts and no tests. `challenge_files/COLCON_IGNORE` keeps the dev build from seeing a duplicate package. Only the inner `team_perception/` folder goes onto the robot. `challenge_files/README.md` covers robot setup and links to the GitHub repo for the debugging tools. Rules:
+- Keep `qr_utils.py` and `poster_utils.py` byte-identical to the dev copies, and when you change the detection logic or a node's behaviour, mirror it here.
+- The dev package's flake8/pep257 tests don't cover this folder, so run `ament_flake8 --linelength 99` and `ament_pep257` in `challenge_files/team_perception` yourself.
 
 Pure logic lives in the ROS-free `*_utils.py` modules, so it can be unit-tested without a ROS graph. Keep it that way: nodes and `annotate` are thin wrappers, and `annotate` must call the same functions as the nodes so that offline results match the robot.
 
