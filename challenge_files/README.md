@@ -28,6 +28,7 @@ must behave the same on the robot.
 challenge_files/
 ├── COLCON_IGNORE            keeps the dev workspace from building this copy (see below)
 └── team_perception/         the ROS 2 package to put on the robot
+    ├── INTEGRATION.md       topics, message formats, how to integrate on the robot
     ├── launch/robot.launch.py
     ├── team_perception/
     │   ├── qr_scanner_node.py       -> /qr/detections, /found "QR found"
@@ -99,6 +100,10 @@ still be set with `ros2 run team_perception <node> --ros-args -p name:=value`. P
 meanings are documented in the GitHub README.
 
 ## Outputs
+
+For the full message formats, what the robot must provide and how to connect other software to
+these outputs, see [team_perception/INTEGRATION.md](team_perception/INTEGRATION.md).
+
 
 | Topic | Type | Content |
 |---|---|---|
