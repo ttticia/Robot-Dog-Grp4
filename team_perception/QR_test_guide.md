@@ -155,17 +155,18 @@ Find the robot's real topic names first:
 ```bash
 ros2 topic list | grep -i -e image -e camera_info -e depth
 ```
-Then start the scanner with those names. The values below are the defaults (RealSense style):
+Then start the scanner with those names. The values below are the defaults (the Lite3's Orbbec camera):
 ```bash
 ros2 run team_perception qr_scanner --ros-args \
   -p image_topic:=/camera/color/image_raw \
   -p image_transport:=compressed \
-  -p depth_topic:=/camera/aligned_depth_to_color/image_raw \
+  -p depth_topic:=/camera/depth/image_raw \
+  -p depth_camera_info_topic:=/camera/depth/camera_info \
   -p camera_info_topic:=/camera/color/camera_info \
   -p map_frame:=map
 ```
 For the scanner to report a map position:
-- The depth image must be **aligned to the colour image**.
+- Depth must be **aligned to the colour image**, or `depth_camera_info_topic` must name the depth camera's `camera_info`. The Lite3's depth is unaligned, so the scanner maps the code's centre into the depth image with both intrinsics and the TF between the two camera frames (a temporary fix until the driver aligns depth).
 - `camera_info` must be published.
 - A TF chain must exist from the camera's optical frame to `map_frame`.
 
@@ -179,7 +180,8 @@ To watch from another computer, view `/qr/debug_image/compressed`. Raw images ca
 |---|---|---|
 | `image_topic` | `/camera/color/image_raw` | Colour image topic. |
 | `image_transport` | `raw` | `compressed` subscribes to `<image_topic>/compressed`; recommended. |
-| `depth_topic` | `/camera/aligned_depth_to_color/image_raw` | Aligned depth, in uint16 mm or float32 m. |
+| `depth_topic` | `/camera/depth/image_raw` | Depth, in uint16 mm or float32 m. |
+| `depth_camera_info_topic` | `/camera/depth/camera_info` | Depth intrinsics, used to map colour pixels into unaligned depth. `''` = the depth is already aligned to colour. |
 | `camera_info_topic` | `/camera/color/camera_info` | Intrinsics, used for 3-D positions. |
 | `use_depth` | `true` | Set to `false` when there is no depth camera, e.g. the webcam. |
 | `map_frame` | `map` | Frame that positions are reported in. |
@@ -356,7 +358,7 @@ Other options: `--max-frames N`, `--no-video` and `--out-root DIR` (or the `TEAM
 | Sender: cannot open camera | Try `--camera 1`. Close other apps using the camera (Teams, the Camera app). |
 | Sender low fps | It forces MJPG already. Try `--width 960 --height 540`, and check that the room is bright, since webcams slow down in low light. |
 | `usbipd` doesn't list the built-in camera | That's expected: it's MIPI, not USB. Use the Windows sender. |
-| `position: null` / `no position` | Check `use_depth`, the `depth_topic` and `camera_info_topic` names, and that depth is aligned to the colour image. |
+| `position: null` / `no position` | Check `use_depth`, the `depth_topic`, `depth_camera_info_topic` and `camera_info_topic` names. The log says `depth not used: ...` with the reason. |
 | Warning `No tf to map` | No TF from the camera to the map (localisation isn't running). The scanner reports in the camera frame meanwhile. |
 | `build/`, `install/`, `log/` appear in `git status` | colcon was run from `src/`. Delete those three folders from `src/` and run colcon from `~/robot_challenge_workspace`. |
 | The same code is reported only once | That's by design. Change `repeat_after_s` if you need more reports. |

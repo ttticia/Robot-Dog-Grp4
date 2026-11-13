@@ -31,7 +31,7 @@ import tf2_ros
 import tf2_geometry_msgs  # noqa: F401  (registers PointStamped with tf2)
 
 from team_perception.human_utils import HumanDetector, box_depth_pixel
-from team_perception.qr_utils import deproject, depth_at
+from team_perception.qr_utils import DepthAlignState, deproject
 
 
 class HumanDetectorNode(Node):
@@ -40,7 +40,9 @@ class HumanDetectorNode(Node):
         p = self.declare_parameter
         p('image_topic', '/camera/color/image_raw')
         p('image_transport', 'raw')    # 'raw', or 'compressed' = <image_topic>/compressed
-        p('depth_topic', '/camera/aligned_depth_to_color/image_raw')
+        p('depth_topic', '/camera/depth/image_raw')
+        p('depth_camera_info_topic', '/camera/depth/camera_info')  # '' = depth is
+        #                                already aligned to colour
         p('camera_info_topic', '/camera/color/camera_info')
         p('use_depth', True)
         p('map_frame', 'map')
@@ -66,6 +68,7 @@ class HumanDetectorNode(Node):
         self.latest_img = None
         self.latest_depth = None
         self.K = None                  # (fx, fy, cx, cy)
+        self.align_state = DepthAlignState(bool(g('depth_camera_info_topic')))
         self.new_frame = threading.Event()
 
         if g('image_transport') == 'compressed':
@@ -80,6 +83,9 @@ class HumanDetectorNode(Node):
         if self.use_depth:
             self.create_subscription(Image, g('depth_topic'), self.on_depth,
                                      qos_profile_sensor_data)
+            if g('depth_camera_info_topic'):
+                self.create_subscription(CameraInfo, g('depth_camera_info_topic'),
+                                         self.on_depth_info, qos_profile_sensor_data)
 
         self.pub = self.create_publisher(String, '/humans/detections', 10)
 
@@ -106,6 +112,11 @@ class HumanDetectorNode(Node):
 
     def on_info(self, msg):
         self.K = (msg.k[0], msg.k[4], msg.k[2], msg.k[5])
+        self.align_state.set_colour(self.K, (msg.width, msg.height), msg.header.frame_id)
+
+    def on_depth_info(self, msg):
+        self.align_state.set_depth((msg.k[0], msg.k[4], msg.k[2], msg.k[5]),
+                                   msg.header.frame_id)
 
     def to_bgr(self, msg):
         if isinstance(msg, CompressedImage):
@@ -163,11 +174,13 @@ class HumanDetectorNode(Node):
         if not self.use_depth or self.latest_depth is None or self.K is None:
             return None
         depth = self.bridge.imgmsg_to_cv2(self.latest_depth, desired_encoding='passthrough')
-        sx = depth.shape[1] / shape[1]
-        sy = depth.shape[0] / shape[0]
-        z = depth_at(depth, u * sx, v * sy)
-        if z is None:
+        align = self.depth_align(depth.shape)     # colour pixel -> (unaligned) depth pixel
+        if align is None:
             return None
+        found = align.depth_at(depth, u, v, image_size=(shape[1], shape[0]))
+        if found is None:
+            return None
+        z = found[0]
         x, y, z = deproject(u, v, z, *self.K)
         pt = PointStamped()
         pt.header = header
@@ -178,6 +191,22 @@ class HumanDetectorNode(Node):
             self.get_logger().warn(f'No tf to {self.map_frame} ({e}); reporting camera frame',
                                    throttle_duration_sec=5.0)
             return pt
+
+    def depth_align(self, depth_shape):
+        """Return the DepthAlign for this depth image, or None (looks up the sensor TF once)."""
+        need = self.align_state.needs_tf()
+        if need is not None:
+            try:
+                tr = self.tf_buffer.lookup_transform(need[0], need[1], Time()).transform
+                self.align_state.t = (tr.translation.x, tr.translation.y, tr.translation.z)
+            except Exception as e:
+                self.get_logger().warn(f'No TF {need[1]} -> {need[0]} ({e}); mapping colour '
+                                       'to depth without the sensor offset',
+                                       throttle_duration_sec=10.0)
+        align, why = self.align_state.get(depth_shape)
+        if align is None:
+            self.get_logger().warn(f'depth not used: {why}', throttle_duration_sec=5.0)
+        return align
 
     def destroy_node(self):
         self.running = False

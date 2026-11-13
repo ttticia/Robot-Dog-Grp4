@@ -78,7 +78,7 @@ from the dev machine to the same path first.
 ```bash
 ros2 launch team_perception robot.launch.py
 ros2 launch team_perception robot.launch.py --show-args        # list all arguments
-ros2 launch team_perception robot.launch.py depth_topic:=/camera/aligned_depth/image_raw
+ros2 launch team_perception robot.launch.py depth_topic:=/camera/aligned_depth/image_raw depth_camera_info_topic:=''
 ros2 launch team_perception robot.launch.py posters:=false     # QR scanner only
 ros2 launch team_perception robot.launch.py qr:=false          # poster pipeline only
 ```
@@ -87,7 +87,8 @@ ros2 launch team_perception robot.launch.py qr:=false          # poster pipeline
 |---|---|---|
 | `image_topic` | `/camera/color/image_raw` | Raw name; `/compressed` is added when `image_transport:=compressed`. |
 | `image_transport` | `compressed` | `raw` or `compressed`. |
-| `depth_topic` | `/camera/depth/image_raw` | Must be **aligned to the colour image** for the poster detector. |
+| `depth_topic` | `/camera/depth/image_raw` | The Lite3's depth is **not aligned** to colour; the nodes compensate (temporary fix, see INTEGRATION.md). |
+| `depth_camera_info_topic` | `/camera/depth/camera_info` | Depth intrinsics for that mapping. Set `''` if `depth_topic` is already aligned to colour. |
 | `camera_info_topic` | `/camera/color/camera_info` | |
 | `use_depth` | `true` | QR codes and people get map positions from depth. |
 | `map_topic` | `/map` | Static map (transient local). |

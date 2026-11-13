@@ -20,7 +20,9 @@ echo "alias perception='$HOME/robot_challenge_workspace/src/team_perception/scri
 | `perception annotate -t <qr\|human\|both> <inputs...>` | Offline annotation into `test_runs/` (section 7). Relative paths work from any folder. |
 | `perception bag-check <bag folder>` | Shows `ros2 bag info` and whether the database is actually readable (catches unfinished copies). |
 
-**Robot camera topics** default to the Orbbec camera recorded in the `test_run` bag: `/camera/color/image_raw` (compressed), `/camera/depth/image_raw` and `/camera/color/camera_info`. Override them per run with environment variables, e.g. `DEPTH_TOPIC=/camera/aligned_depth/image_raw perception poster`. The other variables are `IMAGE_TOPIC`, `IMAGE_TRANSPORT`, `CAMERA_INFO_TOPIC` and `MAP_TOPIC`. `perception help` lists everything.
+**Robot camera topics** default to the Orbbec camera recorded in the `test_run` bag: `/camera/color/image_raw` (compressed), `/camera/depth/image_raw` with `/camera/depth/camera_info`, and `/camera/color/camera_info`. Override them per run with environment variables, e.g. `DEPTH_TOPIC=/camera/aligned_depth/image_raw DEPTH_INFO_TOPIC= perception poster` for driver-aligned depth. The other variables are `IMAGE_TOPIC`, `IMAGE_TRANSPORT`, `CAMERA_INFO_TOPIC` and `MAP_TOPIC`.
+
+**Unaligned depth (temporary fix).** The Lite3's `/camera/depth/image_raw` is *not* aligned to the colour image (depth fx 373 vs colour fx 462, sensors 14 mm apart). With `depth_camera_info_topic` set (default `/camera/depth/camera_info`), every node maps colour pixels into the depth image using both `camera_info`s and the TF between the two camera frames (`qr_utils.DepthAlign`). If the depth topic is already aligned to colour, set `depth_camera_info_topic:=''`. `perception help` lists everything.
 
 The rest of this README shows the underlying commands, for when you need finer control.
 
@@ -148,7 +150,7 @@ python3 ~/robot_challenge_workspace/src/team_perception/scripts/webcam_sender_wi
 # Robot (with depth, which gives map positions):
 ros2 run team_perception qr_scanner --ros-args \
   -p image_topic:=/camera/color/image_raw -p image_transport:=compressed \
-  -p depth_topic:=/camera/aligned_depth_to_color/image_raw \
+  -p depth_topic:=/camera/depth/image_raw -p depth_camera_info_topic:=/camera/depth/camera_info \
   -p camera_info_topic:=/camera/color/camera_info
 # Laptop webcam / video (no depth):
 ros2 run team_perception qr_scanner --ros-args -p image_transport:=compressed -p use_depth:=false
@@ -171,7 +173,7 @@ ros2 topic echo /found std_msgs/msg/String --field data     # prints "QR found" 
 # Robot (with depth, which gives map positions):
 ros2 run team_perception human_detector --ros-args \
   -p image_topic:=/camera/color/image_raw -p image_transport:=compressed \
-  -p depth_topic:=/camera/aligned_depth_to_color/image_raw \
+  -p depth_topic:=/camera/depth/image_raw -p depth_camera_info_topic:=/camera/depth/camera_info \
   -p camera_info_topic:=/camera/color/camera_info
 # Laptop webcam / video (no depth):
 ros2 run team_perception human_detector --ros-args -p image_transport:=compressed -p use_depth:=false
@@ -191,7 +193,7 @@ YOLO runs on a background thread on the newest frame, so the debug video stays a
 | Parameter | Default | Notes |
 |---|---|---|
 | `image_topic` / `image_transport` | `/camera/color/image_raw` / `raw` | Use `compressed` whenever you can. |
-| `depth_topic`, `camera_info_topic`, `use_depth`, `map_frame` | as for `qr_scanner` | Depth must be aligned to the colour image. |
+| `depth_topic`, `depth_camera_info_topic`, `camera_info_topic`, `use_depth`, `map_frame` | as for `qr_scanner` | Unaligned depth is compensated (see *Unaligned depth* under Quick start). |
 | `model` | `yolo11n.pt` | A bare name loads from `~/.cache/team_perception/`; a path is used as given. Bigger models (`yolo11s.pt`) are more accurate and slower. |
 | `conf` | 0.4 | Minimum confidence. Lower it if posters or distant people are missed. |
 | `imgsz` | 640 | YOLO input size. Smaller is faster but misses small or far people. |
@@ -207,7 +209,7 @@ YOLO can't tell a poster of a person from a real person. `poster_detector` takes
 
 ```
 human_detector ──/humans/detections──┐
-aligned depth + camera_info ─────────┼─► poster_detector ─► /posters/detections   (confirmed posters, once each)
+depth + both camera_infos ───────────┼─► poster_detector ─► /posters/detections   (confirmed posters, once each)
 /map + TF camera→map ────────────────┘                    ├► /posters/classifications (every box + the numbers behind its label)
                                                           └► /posters/debug_image[/compressed] (magenta poster / blue real / grey unknown)
 ```
@@ -225,9 +227,10 @@ aligned depth + camera_info ─────────┼─► poster_detector
 4. **Voting:** each poster is tracked by map position. It is reported once it has `vote_need` (5) poster votes among its last `vote_window` (8) frames, then again only after `repeat_after_s`.
 
 ```bash
-# needs human_detector running, depth aligned to colour, localisation (map->camera TF) and /map
+# needs human_detector running, depth (+ its camera_info if unaligned), localisation (map->camera TF) and /map
 ros2 run team_perception poster_detector --ros-args \
-  -p depth_topic:=/camera/aligned_depth_to_color/image_raw -p camera_info_topic:=/camera/color/camera_info \
+  -p depth_topic:=/camera/depth/image_raw -p depth_camera_info_topic:=/camera/depth/camera_info \
+  -p camera_info_topic:=/camera/color/camera_info \
   -p image_topic:=/camera/color/image_raw -p image_transport:=compressed
 ros2 topic echo /posters/detections std_msgs/msg/String
 ros2 run rqt_image_view rqt_image_view /posters/debug_image/compressed
@@ -239,7 +242,7 @@ Each `/posters/detections` message is JSON: `{"stamp", "id", "frame", "position"
 | Parameter | Default | Notes |
 |---|---|---|
 | `detections_topic` | `/humans/detections` | Output of `human_detector`. |
-| `depth_topic`, `camera_info_topic` | aligned depth, colour info | Depth **must be aligned to the colour image**. |
+| `depth_topic`, `depth_camera_info_topic`, `camera_info_topic` | `/camera/depth/image_raw`, `/camera/depth/camera_info`, colour info | The colour box is mapped into the unaligned depth image (corrected for the 14 mm sensor offset at the torso depth). `depth_camera_info_topic:=''` if the depth is already aligned. |
 | `publish_debug`, `image_topic`, `image_transport` | **false**, colour, `raw` | Debugging: subscribe to the colour stream for `/posters/debug_image` and per-poster snapshots. Off by default, because it costs a full colour stream. |
 | `map_topic`, `map_frame`, `use_map`, `map_mode` | `/map`, `map`, true, `veto` | `veto` / `require` / `off` (see above). |
 | `max_dt_s` | 0.1 | Maximum time difference between a detection and the depth frame used. |

@@ -13,19 +13,19 @@ There is **one package**, `team_perception/`. The older `human_detection` and `q
 
 | File in `team_perception/team_perception/` | Role |
 |---|---|
-| `qr_utils.py` | ROS-free QR logic: `decode_qr`, `draw_detections`, `_text_block`, `depth_at`, `deproject`. |
+| `qr_utils.py` | ROS-free QR logic: `decode_qr`, `draw_detections`, `_text_block`, `depth_at`, `deproject`, plus `DepthAlign` / `DepthAlignState` (colour pixel → unaligned depth pixel, see *Unaligned depth* below). |
 | `human_utils.py` | ROS-free person logic: `HumanDetector` (Ultralytics YOLO, class 0), `draw_humans`, `resolve_model`, `box_depth_pixel`. Reuses the drawing and depth helpers from `qr_utils`. |
 | `qr_scanner_node.py` | Node `qr_scanner`: publishes `/qr/detections` and `/qr/debug_image[/compressed]`, logs to `~/qr_logs`. |
 | `human_detector_node.py` | Node `human_detector`: publishes `/humans/detections` and `/humans/debug_image[/compressed]`, logs to `~/human_logs`. |
 | `poster_utils.py` | ROS-free poster-vs-real logic: `edge_ring_test` (inverse-depth plane fit on the torso, extrapolated to a ring outside the box), `StaticMap` + `static_map_test`, `combine` (`map_mode` require/veto/off), `PosterTracker` (voting by position). |
-| `poster_detector_node.py` | Node `poster_detector`: consumes `/humans/detections` (needs its `stamp` + `image_size`), the aligned depth, `camera_info`, `/map` (transient local) and TF. Publishes `/posters/detections` (confirmed only), `/posters/classifications` and `/posters/debug_image[/compressed]`. Logs to `~/poster_logs`. |
+| `poster_detector_node.py` | Node `poster_detector`: consumes `/humans/detections` (needs its `stamp` + `image_size`), the depth with both `camera_info`s, `/map` (transient local) and TF. Publishes `/posters/detections` (confirmed only), `/posters/classifications` and `/posters/debug_image[/compressed]`. Logs to `~/poster_logs`. |
 | `webcam_bridge_node.py` | Node `webcam_bridge`: TCP JPEG stream to `/camera/color/image_raw[/compressed]`. |
 | `annotate.py` | Executable `annotate --type {qr,human,both} <inputs>`: the offline test tool. |
 
 Also in the package: `scripts/` (`perception.sh`, the all-in-one command wrapper; `webcam_sender_windows.py`; `eval_qr_video.py`) and `test/` (unit tests; sample media in `test/testing_data/`: the clip `QR.mp4` and `test_images/`).
 
-**Robot build: `challenge_files/`.** This is a slimmed copy of `team_perception` that runs aboard the dog: the three detector nodes, `qr_utils.py`, `human_utils.py` (without `draw_humans`), `poster_utils.py`, and `launch/robot.launch.py` (`ros2 launch team_perception robot.launch.py`). It has no debug topics, no `/posters/classifications`, no `log_every_s`, no `annotate`, no `webcam_bridge`, no scripts and no tests. `challenge_files/COLCON_IGNORE` keeps the dev build from seeing a duplicate package. Only the inner `team_perception/` folder goes onto the robot. `challenge_files/README.md` covers robot setup and links to the GitHub repo for the debugging tools. `challenge_files/team_perception/INTEGRATION.md` is for the people integrating the package into the robot: required inputs, every output topic with its JSON fields, and how to consume them. Rules:
-- When a topic, JSON field, `/found` string or launch argument changes, update `INTEGRATION.md` in the same change.
+**Robot build: `challenge_files/`.** This is a slimmed copy of `team_perception` that runs aboard the dog: the three detector nodes, `qr_utils.py`, `human_utils.py` (without `draw_humans`), `poster_utils.py`, and `launch/robot.launch.py` (`ros2 launch team_perception robot.launch.py`). It has no debug topics, no `/posters/classifications`, no `log_every_s`, no `annotate`, no `webcam_bridge`, no scripts and no tests. `challenge_files/COLCON_IGNORE` keeps the dev build from seeing a duplicate package. Only the inner `team_perception/` folder goes onto the robot. `challenge_files/README.md` covers robot setup and links to the GitHub repo for the debugging tools. `challenge_files/team_perception/INTEGRATION.md` is for the people integrating the package into the robot: required inputs, every output topic with its JSON fields, and how to consume them. `challenge_files/team_perception/data_required.md` is the checklist of robot data (topics, TF, map) the detections need, and what still works when some of it is missing. Rules:
+- When a topic, JSON field, `/found` string or launch argument changes, update `INTEGRATION.md` in the same change, and `data_required.md` if an input changes.
 - Keep `qr_utils.py` and `poster_utils.py` byte-identical to the dev copies, and when you change the detection logic or a node's behaviour, mirror it here.
 - The dev package's flake8/pep257 tests don't cover this folder, so run `ament_flake8 --linelength 99` and `ament_pep257` in `challenge_files/team_perception` yourself.
 
@@ -40,6 +40,7 @@ colcon build --symlink-install --packages-select team_perception
 source install/setup.bash
 cd src/team_perception && python3 -m pytest test/ -q   # includes flake8 + pep257 checks
 ```
+- `test_depth_align.py` checks the colour→depth mapping with the Lite3's real intrinsics.
 - `test_annotate.py` uses a `FakeDetector`, so it runs fast. `test_human_utils.py` runs the real YOLO model once, on ultralytics' `bus.jpg`.
 - Expected results: **1 xfailed** (`test_D.jpg`, a curved printout no decoder can read: leave it alone). There is no copyright-header test. The repo is Apache-2.0 (`LICENSE` at the root, and declared in `package.xml`/`setup.py`), and files don't carry per-file headers.
 - Style: flake8 with **99-column lines** and pep257 docstrings. The style tests fail on *any* `.py` file inside a package folder, including scratch scripts, so don't leave throwaway scripts in `src/`.
@@ -75,9 +76,62 @@ cd src/team_perception && python3 -m pytest test/ -q   # includes flake8 + pep25
   - A full run on `QR.mp4` (4,112 frames, 640×480) takes about 4 minutes with `--type qr` and about 10 minutes with `human` or `both`, so run it in the background. Use `--max-frames N` for quick checks.
 - **Known human results on QR.mp4:** a poster of a person next to the QR code at about 70–72 s (confidence about 0.85), and real people in the lab background at 4–14 s and 55–100 s. No false positives were seen on the toys or boards.
 - **Known QR.mp4 results:** codes `J` (about 32 s), `I` (35–73 s) and the "rescue team needs medical supplies…" message (about 70 s). A regression in the QR decoder shows up as one of these going missing.
+- **Known `posters_0.db3` results (2026-11-13; bag in `test_runs/`, 53.7 s):**
+  - **Bag contents:** colour and depth at only 15.9 fps (164 dropped-frame gaps, longest 0.37 s), `/tf` with
+    `map→odom→base_link`, no `/map`, no `/leg_odom2`, and no QR codes found.
+  - **Offline, node logic** (`DepthAlign`; scratch `eval_bag_v2.py`):
+    - 760 person boxes: 284 poster, 342 real, 134 unknown.
+    - 9 confirmed tracks, all real posters, about 6–7 physical posters. Two pairs are duplicates because the torso
+      height in the map varies by about 0.5 m.
+    - The `DepthAlign` label matches full registration in 731 of 760 boxes; plain scaling, 612 of 760.
+    - Hand check of samples: the poster label was always right; 1 of 57 "real" labels was a motion-blurred poster;
+      "unknown" was mostly people more than 4 m away.
+  - **Live** (`ros2 bag play` with `/tf`): 5 `Human found`, all in the `map` frame with no false posters.
+    `human_detector` produced only 187 messages, so 4 posters seen briefly didn't reach 5 votes.
 - **poster_detector:** `QR.mp4` has no depth, so it can't be tested on that clip. `test_poster_utils.py` covers the logic on synthetic depth and maps. For a ROS smoke test, publish fake depth, `camera_info`, `/map`, a static TF `map`→camera and `/humans/detections` with matching stamps. The thresholds are still untuned on real robot data.
 - **`/found` (std_msgs/String):** `qr_scanner` publishes `QR found` once per new code text, and `poster_detector` publishes `Human found` once per new poster position. Both are also logged. Keep these exact strings, because other tools may match on them.
 - **Runtime logs:** `~/qr_logs/`, `~/human_logs/` and `~/poster_logs/`, outside the repo.
+
+## Unaligned depth (TEMPORARY fix, added 2026-11-13)
+
+- **The problem.** The Lite3's Orbbec driver publishes `/camera/depth/image_raw` **not aligned** to colour:
+  - depth fx 373 against colour fx 462, so depth sees a wider view;
+  - the color sensor is 14 mm to the right of depth;
+  - there is no `aligned_depth_to_color` topic.
+  
+  The driver runs on the shared lab bridge (`lite3_domain_bridge_4`), which we can't log in to, so alignment can't be
+  turned on there for now (`team_perception/resource/robot_info.md` §3.1, §10 question 4). With plain resolution
+  scaling, pixels at the image edges are about 60 px off.
+- **The fix.** Every node maps colour pixels into the depth image with `qr_utils.DepthAlign`:
+  - It uses both cameras' intrinsics, plus the colour camera's position in the depth optical frame, read once from TF
+    (`/tf_static`).
+  - Depth is looked up twice: first without parallax, then at the corrected pixel.
+  - `poster_detector` maps the box (corrected at the torso depth) and runs `edge_ring_test` directly in the depth
+    image. It deprojects with the depth intrinsics. The full depth image is never re-aligned, which would be too slow
+    in Python.
+- **Parameter** `depth_camera_info_topic`, on all three nodes and in the launch file:
+  - default `/camera/depth/camera_info`;
+  - `''` means the depth is already aligned (plain scaling);
+  - default `depth_topic` is now `/camera/depth/image_raw`;
+  - `perception.sh` passes it as `DEPTH_INFO_TOPIC`.
+- **Check on the 2026-11-12 teleop bag** (`test_runs/teleop_run1_0.db3`, 87 person boxes): the edge-test label matches
+  a full z-buffer alignment in 84 of 87 boxes, against 28 of 87 for plain scaling. The 3 mismatches are unknown against
+  a decided label, never poster against real.
+- **Live smoke test of the same bag** (`ros2 bag play`, domain 89; restart the ROS daemon first or `topic echo`
+  crashes):
+  - On the second run, the poster was confirmed at 11.5 s with 5/5 votes and `Human found` was published, and the real
+    people at 44–45 s were labelled `real`.
+  - On the first run, nothing was confirmed. `human_detector` produced only about 10 messages with people in 52 s,
+    because the CPU was shared with playback, and a poster at the image edge for about 2 s may not collect
+    `vote_need` = 5 votes.
+  - Without `/tf` to `map`, tracking is in the camera frame, so the poster seen again at 31 s became a new track.
+- **Limits.** The rotation between the sensors (about 0.1°) and the colour lens distortion are ignored. Without the TF,
+  mapping can be up to 5 px off at 1 m, and the node warns.
+- **Remove it when** the driver publishes aligned depth: set `depth_camera_info_topic:=''`, and then the
+  `DepthAlign`/`DepthAlignState` code and this section can go.
+- **Logs:** `depth not used: <reason>` means the colour or depth `camera_info` hasn't arrived yet.
+- The offline bag evaluation and the comparison scripts live outside the repo (scratchpad). `annotate` has no depth or
+  bag input yet.
 
 ## Repo rules
 

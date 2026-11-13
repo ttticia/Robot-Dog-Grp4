@@ -228,3 +228,122 @@ def depth_at(depth, u, v, window=5):
 def deproject(u, v, z, fx, fy, cx, cy):
     """Pixel + depth -> 3D point (x right, y down, z forward) in the camera optical frame."""
     return ((u - cx) * z / fx, (v - cy) * z / fy, z)
+
+
+# --- unaligned depth ---------------------------------------------------------------------
+class DepthAlign:
+    """
+    Map colour-image pixels into a depth image that is NOT aligned to the colour image.
+
+    TEMPORARY stand-in for depth-to-colour registration in the camera driver (the Lite3's
+    shared Orbbec driver publishes unaligned depth: fx 373 vs colour fx 462, sensors 14 mm
+    apart). Both cameras are treated as pinhole cameras with parallel axes (the rotation
+    between them is ignored; colour lens distortion too):
+      colour_k, depth_k: (fx, fy, cx, cy) of each camera, from their camera_info
+      colour_size:       (width, height) the colour intrinsics belong to
+      t:                 position of the colour camera in the depth optical frame (m),
+                         from TF; (0, 0, 0) if unknown (then up to ~5 px off at 1 m)
+    With aligned depth (depth_k = colour_k scaled, t = 0) it is plain resolution scaling.
+    """
+
+    def __init__(self, colour_k, colour_size, depth_k, t=(0.0, 0.0, 0.0)):
+        self.ck = tuple(float(v) for v in colour_k)
+        self.size = colour_size
+        self.depth_k = tuple(float(v) for v in depth_k)
+        self.t = tuple(float(v) for v in t)
+
+    @classmethod
+    def assume_aligned(cls, colour_k, colour_size, depth_shape):
+        """Depth registered to colour: only the resolution may differ."""
+        sx = depth_shape[1] / float(colour_size[0])
+        sy = depth_shape[0] / float(colour_size[1])
+        fx, fy, cx, cy = colour_k
+        return cls(colour_k, colour_size, (fx * sx, fy * sy, cx * sx, cy * sy))
+
+    def pixel(self, u, v, z=None, image_size=None):
+        """
+        Colour pixel -> depth-image pixel.
+
+        z (m, depth of the point) also corrects the parallax between the two sensors.
+        image_size: (w, h) of the image (u, v) come from, if not colour_size.
+        """
+        if image_size and self.size and tuple(image_size) != tuple(self.size):
+            u = u * self.size[0] / float(image_size[0])
+            v = v * self.size[1] / float(image_size[1])
+        fx, fy, cx, cy = self.ck
+        x, y = (u - cx) / fx, (v - cy) / fy
+        if z is not None and any(self.t):
+            zz = max(z + self.t[2], 1e-3)
+            x, y = (x * z + self.t[0]) / zz, (y * z + self.t[1]) / zz
+        dfx, dfy, dcx, dcy = self.depth_k
+        return dcx + dfx * x, dcy + dfy * y
+
+    def box(self, box, z=None, image_size=None):
+        """Map a colour box [x1, y1, x2, y2] into the depth image (parallax-corrected with z)."""
+        x1, y1 = self.pixel(box[0], box[1], z, image_size)
+        x2, y2 = self.pixel(box[2], box[3], z, image_size)
+        return [x1, y1, x2, y2]
+
+    def depth_at(self, depth, u, v, image_size=None, window=5):
+        """
+        Depth (m) of a colour pixel as (z, u_depth, v_depth), or None.
+
+        Looks up once without parallax, then again at the parallax-corrected pixel.
+        """
+        ud, vd = self.pixel(u, v, None, image_size)
+        z = depth_at(depth, ud, vd, window)
+        if z is None:
+            return None
+        if any(self.t):
+            ud2, vd2 = self.pixel(u, v, z, image_size)
+            z2 = depth_at(depth, ud2, vd2, window)
+            if z2 is not None:
+                z, ud, vd = z2, ud2, vd2
+        return z, ud, vd
+
+
+class DepthAlignState:
+    """
+    Collects what DepthAlign needs from the camera_info topics and TF (ROS-free part).
+
+    depth_info: True when a depth camera_info topic is configured (unaligned depth is
+    compensated); False to assume the depth image is already aligned to colour.
+    """
+
+    def __init__(self, depth_info=True):
+        self.depth_info = depth_info
+        self.colour = None          # (k, size, frame)
+        self.depth = None           # (k, frame)
+        self.t = None               # colour camera position in the depth optical frame
+
+    def set_colour(self, k, size, frame):
+        self.colour = (tuple(k), tuple(size), frame)
+
+    def set_depth(self, k, frame):
+        if self.depth is None or self.depth[1] != frame:
+            self.t = None
+        self.depth = (tuple(k), frame)
+
+    def needs_tf(self):
+        """(depth_frame, colour_frame) if the TF between the sensors is still missing."""
+        if not self.depth_info or self.colour is None or self.depth is None:
+            return None
+        if self.t is not None:
+            return None
+        if self.colour[2] == self.depth[1]:
+            self.t = (0.0, 0.0, 0.0)
+            return None
+        return self.depth[1], self.colour[2]
+
+    def get(self, depth_shape):
+        """Return (DepthAlign or None, reason)."""
+        if self.colour is None:
+            return None, 'no colour camera_info yet'
+        k, size, _ = self.colour
+        if not self.depth_info:
+            return DepthAlign.assume_aligned(k, size, depth_shape), 'assumed aligned'
+        if self.depth is None:
+            return None, 'no depth camera_info yet'
+        if self.t is None:
+            return DepthAlign(k, size, self.depth[0]), 'no TF between the sensors (t = 0)'
+        return DepthAlign(k, size, self.depth[0], self.t), 'ok'

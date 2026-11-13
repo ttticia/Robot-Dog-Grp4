@@ -21,7 +21,9 @@ ROS_SETUP="${ROS_SETUP:-/opt/ros/humble/setup.bash}"
 # to compressed transport and no depth.
 IMAGE_TOPIC="${IMAGE_TOPIC:-/camera/color/image_raw}"
 IMAGE_TRANSPORT="${IMAGE_TRANSPORT:-compressed}"
-DEPTH_TOPIC="${DEPTH_TOPIC:-/camera/depth/image_raw}"    # must be ALIGNED to colour for poster
+DEPTH_TOPIC="${DEPTH_TOPIC:-/camera/depth/image_raw}"    # Lite3: NOT aligned to colour, so
+DEPTH_INFO_TOPIC="${DEPTH_INFO_TOPIC-/camera/depth/camera_info}"  # nodes map pixels with this
+#                                                          (set DEPTH_INFO_TOPIC= if aligned)
 CAMERA_INFO_TOPIC="${CAMERA_INFO_TOPIC:-/camera/color/camera_info}"
 MAP_TOPIC="${MAP_TOPIC:-/map}"
 
@@ -170,22 +172,22 @@ cmd_qr() {
     source_ws
     # shellcheck disable=SC2046
     exec ros2 run team_perception qr_scanner --ros-args $(robot_args) \
-        -p depth_topic:="$DEPTH_TOPIC" -p camera_info_topic:="$CAMERA_INFO_TOPIC" "$@"
+        -p depth_topic:="$DEPTH_TOPIC" -p depth_camera_info_topic:="$DEPTH_INFO_TOPIC" -p camera_info_topic:="$CAMERA_INFO_TOPIC" "$@"
 }
 
 cmd_human() {
     source_ws
     # shellcheck disable=SC2046
     exec ros2 run team_perception human_detector --ros-args $(robot_args) \
-        -p depth_topic:="$DEPTH_TOPIC" -p camera_info_topic:="$CAMERA_INFO_TOPIC" "$@"
+        -p depth_topic:="$DEPTH_TOPIC" -p depth_camera_info_topic:="$DEPTH_INFO_TOPIC" -p camera_info_topic:="$CAMERA_INFO_TOPIC" "$@"
 }
 
 cmd_poster() {
     source_ws
-    warn "poster_detector needs depth ALIGNED to colour ($DEPTH_TOPIC), localisation (TF to map) and $MAP_TOPIC"
+    warn "poster_detector needs depth ($DEPTH_TOPIC + ${DEPTH_INFO_TOPIC:-assumed aligned}), localisation (TF to map) and $MAP_TOPIC"
     # shellcheck disable=SC2046
     exec ros2 run team_perception poster_detector --ros-args $(robot_args) \
-        -p depth_topic:="$DEPTH_TOPIC" -p camera_info_topic:="$CAMERA_INFO_TOPIC" \
+        -p depth_topic:="$DEPTH_TOPIC" -p depth_camera_info_topic:="$DEPTH_INFO_TOPIC" -p camera_info_topic:="$CAMERA_INFO_TOPIC" \
         -p map_topic:="$MAP_TOPIC" "$@"
 }
 
@@ -329,10 +331,10 @@ Setup
   check                     show decoder/YOLO/numpy/... versions and the package's executables
   test [pytest args]        run the unit + style tests
 
-Live nodes (robot camera topics; override with IMAGE_TOPIC, DEPTH_TOPIC, CAMERA_INFO_TOPIC, MAP_TOPIC)
+Live nodes (robot camera topics; override with IMAGE_TOPIC, DEPTH_TOPIC, DEPTH_INFO_TOPIC, CAMERA_INFO_TOPIC, MAP_TOPIC)
   qr      [ros args]        QR scanner                    e.g. qr -p use_depth:=false
   human   [ros args]        YOLO person detector
-  poster  [ros args]        poster-only detector (needs human, aligned depth, TF + /map)
+  poster  [ros args]        poster-only detector (needs human, depth, TF + /map)
   robot   [qr|human|poster|all] [--echo]   start several nodes together; Ctrl+C stops all
                             --echo also prints /found
 
@@ -350,7 +352,7 @@ Offline
   annotate -t <qr|human|both> <inputs...> [options]   annotated results into test_runs/<type>/
   bag-check <bag folder>    is a rosbag readable, and what topics does it hold?
 
-Current topics: IMAGE_TOPIC=$IMAGE_TOPIC ($IMAGE_TRANSPORT)  DEPTH_TOPIC=$DEPTH_TOPIC
+Current topics: IMAGE_TOPIC=$IMAGE_TOPIC ($IMAGE_TRANSPORT)  DEPTH_TOPIC=$DEPTH_TOPIC  DEPTH_INFO_TOPIC=$DEPTH_INFO_TOPIC
                 CAMERA_INFO_TOPIC=$CAMERA_INFO_TOPIC  MAP_TOPIC=$MAP_TOPIC
 Workspace: $WS
 EOF

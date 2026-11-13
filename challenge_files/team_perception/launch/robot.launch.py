@@ -2,12 +2,15 @@
 Start the robot perception pipeline: qr_scanner, human_detector and poster_detector.
 
     ros2 launch team_perception robot.launch.py
-    ros2 launch team_perception robot.launch.py depth_topic:=/camera/aligned_depth/image_raw
+    ros2 launch team_perception robot.launch.py depth_topic:=/camera/aligned_depth/image_raw \
+        depth_camera_info_topic:=''        # depth already aligned by the driver
     ros2 launch team_perception robot.launch.py posters:=false   # QR scanner only
 
 Every argument has a default that matches the robot's Orbbec camera. Check the real topic
 names with `ros2 topic list` before a run. poster_detector needs depth ALIGNED to the
-colour image, localisation (TF from the camera to map_frame) and the static map.
+colour image or depth_camera_info_topic (the Lite3's depth is NOT aligned; the nodes then
+map colour pixels into it, a temporary fix), localisation (TF from the camera to map_frame)
+and the static map.
 """
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -18,7 +21,10 @@ from launch_ros.actions import Node
 ARGS = {
     'image_topic': ('/camera/color/image_raw', 'colour image topic (raw name)'),
     'image_transport': ('compressed', "'raw', or 'compressed' = <image_topic>/compressed"),
-    'depth_topic': ('/camera/depth/image_raw', 'depth image, aligned to the colour image'),
+    'depth_topic': ('/camera/depth/image_raw', 'depth image (aligned to colour or not)'),
+    'depth_camera_info_topic': ('/camera/depth/camera_info',
+                                "depth intrinsics, to map colour pixels into unaligned depth; "
+                                "'' = depth_topic is already aligned to colour"),
     'camera_info_topic': ('/camera/color/camera_info', 'colour camera intrinsics'),
     'use_depth': ('true', 'place QR codes and people in the map using depth'),
     'map_topic': ('/map', 'static map (nav_msgs/OccupancyGrid, transient local)'),
@@ -33,6 +39,7 @@ def generate_launch_description():
     c = {name: LaunchConfiguration(name) for name in ARGS}
     camera = {'image_topic': c['image_topic'], 'image_transport': c['image_transport'],
               'depth_topic': c['depth_topic'], 'camera_info_topic': c['camera_info_topic'],
+              'depth_camera_info_topic': c['depth_camera_info_topic'],
               'use_depth': c['use_depth'], 'map_frame': c['map_frame']}
     return LaunchDescription([
         *[DeclareLaunchArgument(name, default_value=default, description=desc)
@@ -44,6 +51,7 @@ def generate_launch_description():
         Node(package='team_perception', executable='poster_detector', name='poster_detector',
              output='screen',
              parameters=[{'depth_topic': c['depth_topic'],
+                          'depth_camera_info_topic': c['depth_camera_info_topic'],
                           'camera_info_topic': c['camera_info_topic'],
                           'map_topic': c['map_topic'], 'map_frame': c['map_frame'],
                           'map_mode': c['map_mode']}],

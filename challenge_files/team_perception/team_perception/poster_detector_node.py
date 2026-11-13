@@ -41,8 +41,9 @@ import tf2_ros
 import tf2_geometry_msgs  # noqa: F401  (registers PointStamped with tf2)
 
 from team_perception.poster_utils import (MAP_MODES, MapParams, PosterTracker, RingParams,
-                                          StaticMap, combine, edge_ring_test, scale_box,
-                                          static_map_test, to_metres, torso_pixel_and_depth)
+                                          StaticMap, combine, edge_ring_test, static_map_test,
+                                          to_metres, torso_pixel_and_depth)
+from team_perception.qr_utils import DepthAlignState
 
 
 def _stamp(msg_header):
@@ -78,7 +79,9 @@ class PosterDetector(Node):
         super().__init__('poster_detector')
         p = self.declare_parameter
         p('detections_topic', '/humans/detections')
-        p('depth_topic', '/camera/aligned_depth_to_color/image_raw')
+        p('depth_topic', '/camera/depth/image_raw')
+        p('depth_camera_info_topic', '/camera/depth/camera_info')  # '' = depth is
+        #                                already aligned to colour
         p('camera_info_topic', '/camera/color/camera_info')
         p('map_topic', '/map')
         p('map_frame', 'map')
@@ -125,6 +128,7 @@ class PosterDetector(Node):
         self.bridge = CvBridge()
         self.depth_buf = StampBuffer()
         self.K = None
+        self.align_state = DepthAlignState(bool(g('depth_camera_info_topic')))
         self.static_map = None
 
         self.create_subscription(String, g('detections_topic'), self.on_detections, 10)
@@ -133,6 +137,9 @@ class PosterDetector(Node):
                                  qos_profile_sensor_data)
         self.create_subscription(CameraInfo, g('camera_info_topic'), self.on_info,
                                  qos_profile_sensor_data)
+        if g('depth_camera_info_topic'):
+            self.create_subscription(CameraInfo, g('depth_camera_info_topic'),
+                                     self.on_depth_info, qos_profile_sensor_data)
         if self.use_map:
             latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                                  reliability=ReliabilityPolicy.RELIABLE)
@@ -155,6 +162,12 @@ class PosterDetector(Node):
     # --- inputs ------------------------------------------------------------------
     def on_info(self, msg):
         self.K = (msg.k[0], msg.k[4], msg.k[2], msg.k[5], msg.width, msg.height)
+        self.align_state.set_colour(self.K[:4], (msg.width, msg.height),
+                                    msg.header.frame_id)
+
+    def on_depth_info(self, msg):
+        self.align_state.set_depth((msg.k[0], msg.k[4], msg.k[2], msg.k[5]),
+                                   msg.header.frame_id)
 
     def on_map(self, msg):
         q = msg.info.origin.orientation
@@ -182,20 +195,29 @@ class PosterDetector(Node):
                 throttle_duration_sec=5.0)
             return
         depth = to_metres(self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='passthrough'))
+        align = self.depth_align(depth.shape)
+        if align is None:
+            return
 
         for person in det.get('people', []):
-            r = self.classify(person, det, depth, depth_msg.header)
+            r = self.classify(person, det, depth, depth_msg.header, align)
             if r['report']:
                 self.report(r, stamp)
 
-    def classify(self, person, det, depth, depth_header):
-        box = scale_box(person['box'], det.get('image_size'), depth.shape)
+    def classify(self, person, det, depth, depth_header, align):
+        # Colour box -> depth-image box: first without parallax to get the torso depth,
+        # then again corrected for the offset between the two sensors at that depth.
+        size = det.get('image_size')
+        box = align.box(person['box'], image_size=size)
+        tp = torso_pixel_and_depth(depth, box, self.ring_p)
+        if tp is not None:
+            box = align.box(person['box'], z=tp[2], image_size=size)
         ring, ring_m = edge_ring_test(depth, box, self.ring_p)
         out = {'box': person['box'], 'conf': person.get('conf'), 'ring': ring,
                'ring_metrics': ring_m, 'map': 'unknown', 'map_metrics': {},
                'position': None, 'frame': None, 'report': False}
 
-        point = self.locate(depth, box, depth_header)
+        point = self.locate(depth, box, depth_header, align)
         if point is not None:
             out['frame'] = point.header.frame_id
             out['position'] = [round(point.point.x, 3), round(point.point.y, 3),
@@ -215,19 +237,13 @@ class PosterDetector(Node):
             out['confirmed_poster'] = self.tracker.is_poster(track)
         return out
 
-    def locate(self, depth, box, header):
-        """Torso point as PointStamped in the map frame (camera frame if no tf), or None."""
-        if self.K is None:
-            self.get_logger().warn('no camera_info yet', throttle_duration_sec=5.0)
-            return None
+    def locate(self, depth, box, header, align):
+        """Torso point as PointStamped in the map frame (depth frame if no tf), or None."""
         tp = torso_pixel_and_depth(depth, box, self.ring_p)
         if tp is None:
             return None
         u, v, z = tp
-        fx, fy, cx, cy, w, h = self.K
-        if w and h and (w != depth.shape[1] or h != depth.shape[0]):   # intrinsics for
-            sx, sy = depth.shape[1] / w, depth.shape[0] / h            # another resolution
-            fx, cx, fy, cy = fx * sx, cx * sx, fy * sy, cy * sy
+        fx, fy, cx, cy = align.depth_k         # box is in depth-image pixels
         pt = PointStamped()
         pt.header = header
         pt.point.x, pt.point.y, pt.point.z = (u - cx) * z / fx, (v - cy) * z / fy, z
@@ -237,6 +253,22 @@ class PosterDetector(Node):
             self.get_logger().warn(f'No tf to {self.map_frame} ({e}); tracking in camera '
                                    'frame, map test skipped', throttle_duration_sec=5.0)
             return pt
+
+    def depth_align(self, depth_shape):
+        """Return the DepthAlign for this depth image, or None (looks up the sensor TF once)."""
+        need = self.align_state.needs_tf()
+        if need is not None:
+            try:
+                tr = self.tf_buffer.lookup_transform(need[0], need[1], Time()).transform
+                self.align_state.t = (tr.translation.x, tr.translation.y, tr.translation.z)
+            except Exception as e:
+                self.get_logger().warn(f'No TF {need[1]} -> {need[0]} ({e}); mapping colour '
+                                       'to depth without the sensor offset',
+                                       throttle_duration_sec=10.0)
+        align, why = self.align_state.get(depth_shape)
+        if align is None:
+            self.get_logger().warn(f'depth not used: {why}', throttle_duration_sec=5.0)
+        return align
 
     # --- outputs -----------------------------------------------------------------
     def report(self, r, stamp):

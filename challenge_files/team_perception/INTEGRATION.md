@@ -1,12 +1,13 @@
 # Integrating `team_perception` on the robot
 
 What the perception package needs from the robot, what it publishes, and how to use its
-outputs. For installing and building, see [../README.md](../README.md).
+outputs. For installing and building, see [../README.md](../README.md). A one-page
+checklist of the robot data it needs is in [data_required.md](data_required.md).
 
 ## In short
 
 ```bash
-ros2 launch team_perception robot.launch.py depth_topic:=<depth aligned to colour>
+ros2 launch team_perception robot.launch.py          # defaults match the Lite3
 ```
 
 One launch file starts three nodes. To know when the robot has found something, listen
@@ -19,7 +20,7 @@ was found and *where*, read `/qr/detections` and `/posters/detections` (JSON in 
                  │
                  └─► human_detector ─► /humans/detections ─► poster_detector ─► /posters/detections
                                                                    ▲            /found "Human found"
- camera depth (aligned) ─► qr_scanner, human_detector, poster_detector
+ camera depth + depth camera_info ─► qr_scanner, human_detector, poster_detector
  camera_info, TF camera→map, /map ───────────────────────────────┘
 ```
 
@@ -28,21 +29,25 @@ was found and *where*, read `/qr/detections` and `/posters/detections` (JSON in 
 | Input | Type | Used by | If it's missing |
 |---|---|---|---|
 | Colour image: `/camera/color/image_raw/compressed` (or raw with `image_transport:=raw`) | `sensor_msgs/CompressedImage` or `Image` | all detection | Nothing is detected. |
-| Depth image **aligned to the colour image**, 16UC1 mm or 32FC1 m | `sensor_msgs/Image` | positions; the poster test | QR codes still reported, with no position. **Posters are never confirmed.** |
+| Depth image `/camera/depth/image_raw`, 16UC1 mm or 32FC1 m, plus its `/camera/depth/camera_info` (not needed if the depth is aligned to colour) | `sensor_msgs/Image`, `CameraInfo` | positions; the poster test | QR codes still reported, with no position. **Posters are never confirmed.** |
+| TF `camera_color_optical_frame` → `camera_depth_optical_frame` (robot's `/tf_static`) | TF | colour-to-depth mapping | Mapping is up to 5 px off at 1 m. |
 | Colour camera intrinsics: `/camera/color/camera_info` | `sensor_msgs/CameraInfo` | positions | No positions. |
 | TF from the camera optical frame to `map` (from localisation) | TF | positions in `map`; the map test | Positions come out in the camera frame (it says so in `frame`), and the map test is skipped. |
 | Static map: `/map`, transient local, built **without people in it** | `nav_msgs/OccupancyGrid` | the poster map test (`map_mode`) | With the default `veto`, the depth test decides alone. |
 
-**"Aligned" matters.** The depth stream must cover the same view and pixel grid as the colour image: the same
-intrinsics in its `camera_info`. In the 2026-11-12 teleop bag, `/camera/depth/image_raw` is **not**
-aligned (depth fx = 373, colour fx = 462). Pointing `poster_detector` at it gave about a quarter as many poster
-labels and confirmed the poster 21 s later than aligned depth did. Turn on depth-to-colour alignment in the
-camera driver (for the Orbbec ROS 2 driver this is normally the `depth_registration` setting).
-To check it: the depth topic's `camera_info` should then match `/camera/color/camera_info`.
-
-> **Open question: the depth topic.** `robot.launch.py` still uses `/camera/depth/image_raw` by default.
-> Before relying on posters, check on the robot whether that topic is aligned (compare the two
-> `camera_info` topics as above), and pass the aligned topic as `depth_topic:=...` if it isn't.
+**Unaligned depth: compensated in our code for now.** On the Lite3, `/camera/depth/image_raw`
+is **not** aligned to the colour image: depth fx = 373 against colour fx = 462, and the two sensors are 14 mm apart.
+The Orbbec driver runs on the shared lab bridge, which we can't log in to, so alignment can't be turned on there
+yet. Until it can, every node maps colour pixels into the depth image itself:
+- It uses both `camera_info` topics and the TF between `camera_color_optical_frame` and
+  `camera_depth_optical_frame` (on `/tf_static`). This is `qr_utils.DepthAlign`.
+- Without that mapping, pixels near the left and right image edges are about 60 px off. In the 2026-11-12 bag this
+  gave about a quarter as many poster labels, and the poster was confirmed 21 s late.
+- Without the TF, the mapping still runs, but ignores the 14 mm offset: up to 5 px off at 1 m. The log warns.
+- If depth-to-colour alignment is ever turned on in the driver, pass `depth_camera_info_topic:=''` (and the aligned
+  `depth_topic`). To check whether depth is aligned: the depth topic's `camera_info` then matches
+  `/camera/color/camera_info`.
+- If depth or its `camera_info` is missing, the log says `depth not used: <reason>`.
 
 Check every topic name with `ros2 topic list` and override with launch arguments
 (`ros2 launch team_perception robot.launch.py --show-args`).
@@ -128,7 +133,7 @@ These are created on the first find, outside the workspace:
 1. **Start it** with the robot's other software, for example by including
    `robot.launch.py` from the robot's main launch file, with the topic names set as launch
    arguments. `qr:=false` or `posters:=false` turns off one half.
-2. **Before it starts**, make sure the camera driver publishes aligned depth, localisation
+2. **Before it starts**, make sure depth and both `camera_info` topics are published, localisation
    publishes TF to `map`, and the static map is on `/map`.
 3. **Use the outputs.** For a counter or a score display, subscribe to `/found`. To mark finds on the
    map or to record them for scoring, subscribe to `/qr/detections` and `/posters/detections` and
