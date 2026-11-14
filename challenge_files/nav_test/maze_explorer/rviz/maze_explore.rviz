@@ -1,0 +1,76 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Map
+      Name: SLAM map
+      Enabled: true
+      Topic:
+        Value: /map
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+      Color Scheme: map
+      Alpha: 0.8
+    - Class: rviz_default_plugins/Map
+      Name: Camera coverage (red = unseen wall)
+      Enabled: true
+      Topic:
+        Value: /maze_explorer/coverage
+      Color Scheme: costmap
+      Alpha: 0.6
+    - Class: rviz_default_plugins/Map
+      Name: Global costmap
+      Enabled: false
+      Topic:
+        Value: /global_costmap/costmap
+      Color Scheme: costmap
+      Alpha: 0.4
+    - Class: rviz_default_plugins/LaserScan
+      Name: Scan
+      Enabled: true
+      Topic:
+        Value: /scan
+        Reliability Policy: Best Effort
+      Size (m): 0.04
+      Color Transformer: FlatColor
+      Color: 255; 0; 0
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Frontiers (debug:=true)
+      Enabled: true
+      Topic:
+        Value: /explore/frontiers
+    - Class: rviz_default_plugins/Path
+      Name: Plan
+      Enabled: true
+      Topic:
+        Value: /plan
+      Color: 0; 170; 255
+    - Class: rviz_default_plugins/Polygon
+      Name: Footprint
+      Enabled: true
+      Topic:
+        Value: /local_costmap/published_footprint
+      Color: 0; 255; 0
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Show Names: false
+      Marker Scale: 0.4
+  Global Options:
+    Fixed Frame: map
+    Background Color: 48; 48; 48
+    Frame Rate: 15
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Value: /goal_pose
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: Current View
+      Scale: 80
+      X: 0
+      Y: 0

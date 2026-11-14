@@ -1,0 +1,11 @@
+# test_maze with an opening to the outside behind the start cell (west border).
+# The robot starts facing +x (east), so the opening is behind it: run with entrance:=back.
++---+---+---+---+---+
+|       |           |
++   +   +   +---+   +
+|   |       |   |   |
++   +---+---+   +   +
+|           |       |
++   +   +   +---+   +
+  S     |    ###    |
++---+---+---+---+---+

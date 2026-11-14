@@ -1,8 +1,11 @@
 """
-Human detector node (Ultralytics YOLO, 'person' class; robot build: no debug video).
+Human detector node (Ultralytics YOLO, 'person' class; external-computer build, no debug video).
 
 Runs YOLO on a background thread on the newest camera frame. Optionally uses an aligned
 depth image to place each person in the map frame. poster_detector consumes its output.
+On the external computer it reads the robot's throttled JPEG stream and runs without depth
+(external.launch.py); the stamp in each message lets poster_detector, on the robot, pair the
+boxes with its local depth image.
 
 Topics (all names are parameters - VERIFY on the robot with `ros2 topic list`):
   in : image_topic        sensor_msgs/Image, or <image_topic>/compressed
@@ -30,8 +33,8 @@ from geometry_msgs.msg import PointStamped
 import tf2_ros
 import tf2_geometry_msgs  # noqa: F401  (registers PointStamped with tf2)
 
-from team_perception.human_utils import HumanDetector, box_depth_pixel
-from team_perception.qr_utils import DepthAlignState, deproject
+from team_perception_external.human_utils import HumanDetector, box_depth_pixel
+from team_perception_external.qr_utils import DepthAlignState, deproject
 
 
 class HumanDetectorNode(Node):

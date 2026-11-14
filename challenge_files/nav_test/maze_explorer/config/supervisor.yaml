@@ -1,0 +1,49 @@
+# explore_supervisor: 360° spins and camera-coverage goals on top of explore_lite.
+explore_supervisor:
+  ros__parameters:
+    spin_enabled: true
+    spin_spacing_m: 1.0           # spin once per metre of new ground (one maze cell)
+    spin_angle: 6.2832            # rad
+    spin_time_allowance: 40.0     # s (2 pi at 0.5 rad/s takes ~13 s)
+    coverage_enabled: true
+    camera_frame: camera_link     # x forward; the 20 deg pitch is ignored
+    camera_hfov_deg: 70.0         # Gemini 335 colour is 86 deg; margin for the edges
+    camera_max_range: 2.5         # m; further than this a QR code is too small
+    camera_min_range: 0.3
+    max_incidence_deg: 60.0       # views more oblique than this don't count
+    mark_period: 0.25             # s
+    robot_radius: 0.25            # m; centre-to-wall clearance for view poses/reachability
+    view_min: 0.6                 # m from the wall
+    view_ideal: 1.0
+    view_max: 1.6
+    min_cluster_m: 0.3            # ignore unseen wall pieces shorter than this
+    coverage_goal_timeout: 90.0   # s
+    dwell_s: 1.0                  # stand still this long at each view pose
+    max_rounds: 3                 # explore -> coverage rounds
+    stall_timeout_s: 90.0         # exploring with < stall_distance_m progress this long:
+    stall_distance_m: 0.25        #   treat exploration as finished (go to coverage)
+    # Gait at the start (robot_info.md §6.3). H-Step made the robot unsteady once
+    # (2026-11-12, cause unknown): only with the operator's agreement. none = don't touch.
+    gait: h_step                  # none | h_step | rug_general | rug_grip
+    gait_topic: /simple_cmd
+    gait_wait_s: 10.0             # wait this long for the bridge to subscribe
+    gait_settle_s: 2.0
+    # Gait check: foot lift from /joint_states during the first spin. 0 = only report it.
+    # Calibrate with `ros2 run maze_explorer step_height` (README), then set it between the
+    # normal gait's lift and H-Step's.
+    gait_min_lift_m: 0.0
+    gait_check_fail: warn         # warn | stop
+    joint_states_topic: /joint_states
+    # Virtual fence (start frame: origin = robot's start pose, x ahead, y left; the robot
+    # must start at the centre of its cell, facing along the grid).
+    entrance: ''                  # start-cell edges to close: e.g. 'back' or 'back,left'
+    fence_polygon: ''             # 'x1,y1,x2,y2,...' m; everything outside is closed
+    cell_size: 1.0
+    fence_thickness: 0.1
+    fence_seal_m: 0.5             # unknown cells this close to a virtual wall count as free
+    fenced_map_topic: /map_fenced
+    global_frame: map
+    base_frame: base_link
+    map_topic: /map
+    explore_status_topic: /explore/status
+    explore_resume_topic: /explore/resume

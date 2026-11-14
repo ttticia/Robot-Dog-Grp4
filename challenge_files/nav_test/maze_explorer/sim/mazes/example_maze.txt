@@ -1,0 +1,10 @@
+# Layout of challenge_files/nav_test/example maze.step (topology only; 1 m cells).
+# S = start, ### = the stairs cell (a solid block here: the robot does not climb it),
+# ... = not part of the maze.
++---+---+---+---+
+|...|...|   |...|
++---+---+   +---+
+|...|           |
++---+   +---+   +
+|###    |...| S |
++---+---+---+---+

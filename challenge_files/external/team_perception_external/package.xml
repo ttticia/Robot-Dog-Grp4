@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>team_perception_external</name>
+  <version>0.0.0</version>
+  <description>External-computer build of team_perception: YOLO person detector
+    (human_detector) for the robot dog.</description>
+  <maintainer email="ng.tricia2005@gmail.com">ngtri</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <!-- Also needs torch, torchvision and ultralytics from pip (no rosdep keys):
+       run install_deps.sh -->
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

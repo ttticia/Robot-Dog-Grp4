@@ -1,0 +1,15 @@
+# explore_lite (m-explore-ros2). See its README for every parameter.
+explore_node:
+  ros__parameters:
+    robot_base_frame: base_link
+    return_to_init: false
+    costmap_topic: /map               # slam_toolbox's map, not a Nav2 costmap
+    costmap_updates_topic: /map_updates
+    visualize: false                  # frontier markers; the launch sets it from debug:=
+    planner_frequency: 0.5
+    progress_timeout: 30.0            # blacklist a frontier after 30 s without progress
+    potential_scale: 3.0              # weight of distance to the frontier
+    orientation_scale: 0.0
+    gain_scale: 1.0                   # weight of frontier size
+    transform_tolerance: 0.5
+    min_frontier_size: 0.5            # m; smaller gaps are ignored

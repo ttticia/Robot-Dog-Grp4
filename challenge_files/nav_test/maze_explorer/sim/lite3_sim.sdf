@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<!-- Stand-in for the Lite3 in Gazebo classic: a box the size of the body, moved by the
+     planar-move plugin (holonomic, takes /cmd_vel, publishes /odom and odom->base_link like
+     Fast-LIO's odom_relay does on the robot), and a Livox-Mid-360-like lidar at the real
+     mount (0.187 m ahead, 0.125 m above base_link, pitched 15 deg down, -7..+52 deg vertical
+     FOV). base_link is 0.35 m above the floor. No legs and no camera image: the camera only
+     matters as a TF frame (camera_link) for coverage. -->
+<sdf version="1.6">
+  <model name="lite3">
+    <link name="base_link">
+      <inertial>
+        <mass>15.0</mass>
+        <inertia><ixx>0.4</ixx><iyy>0.6</iyy><izz>0.6</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <collision name="body">
+        <!-- body plus a block for the legs, down to the floor -->
+        <pose>0 0 -0.14 0 0 0</pose>
+        <geometry><box><size>0.548 0.370 0.42</size></box></geometry>
+        <surface><friction><ode><mu>0.0</mu><mu2>0.0</mu2></ode></friction></surface>
+      </collision>
+      <visual name="body">
+        <geometry><box><size>0.548 0.370 0.118</size></box></geometry>
+        <material><ambient>0.2 0.2 0.25 1</ambient><diffuse>0.2 0.2 0.25 1</diffuse></material>
+      </visual>
+      <visual name="legs">
+        <pose>0 0 -0.20 0 0 0</pose>
+        <geometry><box><size>0.40 0.30 0.30</size></box></geometry>
+        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      </visual>
+      <sensor name="livox" type="ray">
+        <pose>0.18678 0 0.12498 0 0.2618 0</pose>
+        <always_on>true</always_on>
+        <update_rate>10</update_rate>
+        <ray>
+          <scan>
+            <horizontal><samples>360</samples><resolution>1</resolution>
+              <min_angle>-3.14159</min_angle><max_angle>3.14159</max_angle></horizontal>
+            <vertical><samples>30</samples><resolution>1</resolution>
+              <min_angle>-0.1222</min_angle><max_angle>0.9076</max_angle></vertical>
+          </scan>
+          <range><min>0.1</min><max>20.0</max><resolution>0.01</resolution></range>
+          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.01</stddev></noise>
+        </ray>
+        <plugin name="livox_points" filename="libgazebo_ros_ray_sensor.so">
+          <ros><remapping>~/out:=/livox/points</remapping></ros>
+          <output_type>sensor_msgs/PointCloud2</output_type>
+          <frame_name>livox_frame</frame_name>
+        </plugin>
+      </sensor>
+    </link>
+    <plugin name="planar_move" filename="libgazebo_ros_planar_move.so">
+      <ros>
+        <remapping>cmd_vel:=/cmd_vel</remapping>
+        <remapping>odom:=/odom</remapping>
+      </ros>
+      <update_rate>50</update_rate>
+      <publish_rate>20</publish_rate>
+      <publish_odom>true</publish_odom>
+      <publish_odom_tf>true</publish_odom_tf>
+      <odometry_frame>odom</odometry_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <covariance_x>0.0001</covariance_x>
+      <covariance_y>0.0001</covariance_y>
+      <covariance_yaw>0.001</covariance_yaw>
+    </plugin>
+  </model>
+</sdf>

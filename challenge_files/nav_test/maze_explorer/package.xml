@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>maze_explorer</name>
+  <version>0.0.0</version>
+  <description>Explores a maze of 1 m cells with slam_toolbox, Nav2 and explore_lite, adds
+    360-degree spins and camera-coverage goals, and has a Gazebo test world.</description>
+  <maintainer email="ng.tricia2005@gmail.com">ngtri</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>action_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>sensor_msgs</depend>
+  <!-- /simple_cmd for the gait (gait:=none doesn't need it). Not on apt: on the robot it is
+       ~/lite3_ws/src/transfer_interfaces; see robot_info.md §2 -->
+  <exec_depend>transfer_interfaces</exec_depend>
+  <!-- From source: github.com/robo-friends/m-explore-ros2 (see install_deps.sh) -->
+  <depend>explore_lite_msgs</depend>
+  <exec_depend>explore_lite</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>pointcloud_to_laserscan</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+  <exec_depend>nav2_controller</exec_depend>
+  <exec_depend>nav2_planner</exec_depend>
+  <exec_depend>nav2_behaviors</exec_depend>
+  <exec_depend>nav2_bt_navigator</exec_depend>
+  <exec_depend>nav2_velocity_smoother</exec_depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
+  <exec_depend>nav2_regulated_pure_pursuit_controller</exec_depend>
+  <exec_depend>nav2_navfn_planner</exec_depend>
+  <exec_depend>nav2_common</exec_depend>
+  <!-- simulation only (sim.launch.py) -->
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>gazebo_plugins</exec_depend>
+
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

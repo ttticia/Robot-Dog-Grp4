@@ -1,17 +1,13 @@
-# pip-only dependencies (not available through apt / rosdep). Install on every machine
-# that runs the nodes, including the robot:
+# pip-only dependencies of the ONBOARD package (not available through apt / rosdep).
+# install_deps.sh installs these together with the apt packages:
 #
-#     pip3 install --user torch==2.14.1 torchvision==0.29.2 --index-url https://download.pytorch.org/whl/cpu
-#     pip3 install --user -r src/team_perception/requirements.txt   # path on the robot
-#     pip3 uninstall -y setuptools     # torch pulls in a setuptools that breaks colcon on Humble
+#     bash install_deps.sh              # or: pip3 install --user -r requirements.txt
 #
-# torch: the CPU-only build keeps the download ~200 MB instead of several GB. On a machine
-# with an NVIDIA GPU, drop --index-url to get the CUDA build (then use device:=0).
+# No torch or YOLO here: person detection runs on the external computer
+# (challenge_files/external/team_perception_external).
 # numpy must stay below 2: ROS Humble's cv_bridge is built against numpy 1.x.
 
 # QR decoding. The scanner still works without it (falls back to pyzbar), but is slower
 # and misses tilted codes.
 zxing-cpp==2.3.0
-# Person detection (human_detector node)
-ultralytics==8.4.210
 numpy<2

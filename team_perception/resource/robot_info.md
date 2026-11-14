@@ -15,7 +15,7 @@ against it.
 - **How sure each fact is:** **[live]** means seen on the robot. **[doc]** means from the
   manufacturer documents or source. **[unverified]** means believed but not yet tested on
   our robot.
-- **Related:** `agent.md` (workspace and build guide), `src/team_perception/INTEGRATION.md`
+- **Related:** `agent.md` (workspace and build guide), `src/challenge_files/onboard-external_communication.md`
   (perception outputs), `src/navigation/lite3-maze/README.md` (maze autonomy).
 
 ---
@@ -223,7 +223,7 @@ Check `ros2 node list` first.
 | `/cmd_vel_nav` → `/nav_cmd_vel` | `geometry_msgs/Twist` | Nav2 controller → velocity smoother | Must still be forwarded to `/cmd_vel` (§6.2) |
 | `/joy_cmd_vel` | `Twist` | `teleop_twist_joy` (USB gamepad on the robot computer; LB = enable, RB = turbo) | Lab launcher only |
 | `/robot_mode`, `/maze/*`, `/n_humans` | | `lite3-maze` | See `src/navigation/lite3-maze/README.md` |
-| `/qr/detections`, `/humans/detections`, `/posters/detections`, `/found` | `std_msgs/String` | `team_perception` | See `src/team_perception/INTEGRATION.md` |
+| `/qr/detections`, `/humans/detections`, `/posters/detections`, `/found` | `std_msgs/String` | `team_perception` | See `src/challenge_files/onboard-external_communication.md` |
 
 Lab `twist_mux` (`lite3_launcher/config/twist_mux_topics.yaml`): `joy_cmd_vel` (priority
 100, timeout 0.5 s) beats `nav_cmd_vel` (priority 10, timeout 0.5 s), output `/cmd_vel`.

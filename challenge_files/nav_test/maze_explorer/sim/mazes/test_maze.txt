@@ -1,0 +1,10 @@
+# Bigger test maze (5 x 4 cells) with a loop, dead ends and a solid block.
++---+---+---+---+---+
+|       |           |
++   +   +   +---+   +
+|   |       |   |   |
++   +---+---+   +   +
+|           |       |
++   +   +   +---+   +
+| S     |    ###    |
++---+---+---+---+---+

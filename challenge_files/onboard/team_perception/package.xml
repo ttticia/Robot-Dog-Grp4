@@ -3,8 +3,8 @@
 <package format="3">
   <name>team_perception</name>
   <version>0.0.0</version>
-  <description>Robot build of team_perception: QR scanner, YOLO person detector and poster
-    detector, without debugging tools.</description>
+  <description>Onboard robot build of team_perception: QR scanner, poster detector and the
+    image throttle feeding the external YOLO computer.</description>
   <maintainer email="ng.tricia2005@gmail.com">ngtri</maintainer>
   <license>Apache-2.0</license>
 
@@ -18,10 +18,11 @@
   <depend>tf2_geometry_msgs</depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
   <!-- Humble's OpenCV is built without QUIRC and cannot decode QR codes -->
   <exec_depend>python3-pyzbar</exec_depend>
-  <!-- Also needs zxing-cpp, ultralytics and CPU torch from pip (no rosdep keys):
-       see requirements.txt -->
+  <!-- Also needs zxing-cpp from pip (no rosdep key): run install_deps.sh -->
 
   <export>
     <build_type>ament_python</build_type>

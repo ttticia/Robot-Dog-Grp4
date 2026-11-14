@@ -1,0 +1,11 @@
+# cmd_vel_relay: Nav2 -> /cmd_vel with the Lite3 bridge's QoS (robot_info.md §6.2).
+cmd_vel_relay:
+  ros__parameters:
+    input_topic: /nav_cmd_vel
+    output_topic: /cmd_vel
+    max_linear_x: 0.25            # team limit
+    max_linear_y: 0.1
+    max_angular_z: 0.5            # team limit
+    stale_timeout: 0.5
+    lifespan: 0.3
+    rate_hz: 20.0

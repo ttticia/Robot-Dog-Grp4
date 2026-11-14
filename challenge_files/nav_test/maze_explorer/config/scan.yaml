@@ -1,0 +1,20 @@
+# pointcloud_to_laserscan: Livox cloud -> 2D /scan for slam_toolbox and Nav2.
+# Heights are relative to base_link, which is ~0.35 m above the floor when standing.
+# The maze walls are ~0.45 m high (top at ~+0.10 in base_link), so the lab's default
+# band (+0.1..+0.5) sees almost nothing of them. This band keeps the walls and drops:
+#  - the floor (-0.35) and low terrain cells (up to ~0.15 m high, i.e. below -0.20);
+#  - the robot's own body (also removed by range_min).
+pointcloud_to_laserscan:
+  ros__parameters:
+    target_frame: base_link
+    transform_tolerance: 0.2
+    min_height: -0.15
+    max_height: 0.08
+    angle_min: -3.14159
+    angle_max: 3.14159
+    angle_increment: 0.0087          # 0.5 deg
+    scan_time: 0.1
+    range_min: 0.40                  # body and legs are within ~0.35 m of base_link
+    range_max: 6.0                   # the floor seems to rise ~3 cm/m; far floor hits get in
+    use_inf: true
+    inf_epsilon: 1.0
